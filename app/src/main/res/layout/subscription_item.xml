@@ -12,7 +12,6 @@
         android:id="@+id/imgvCover"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@color/non_square_icon_background"
         android:scaleType="fitCenter"
         squareImageView:direction="width"
         tools:src="@tools:sample/avatars" />

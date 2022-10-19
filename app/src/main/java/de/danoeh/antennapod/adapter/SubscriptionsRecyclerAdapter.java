@@ -20,11 +20,18 @@ import android.widget.ImageView;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 
+import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.RequestBuilder;
+import com.bumptech.glide.load.resource.bitmap.FitCenter;
+import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
+import com.bumptech.glide.request.RequestOptions;
 
 import java.lang.ref.WeakReference;
 import java.text.NumberFormat;
@@ -105,35 +112,36 @@ public class SubscriptionsRecyclerAdapter extends SelectableAdapter<Subscription
         boolean isFeed = drawerItem.type == NavDrawerData.DrawerItem.Type.FEED;
         holder.bind(drawerItem);
         holder.itemView.setOnCreateContextMenuListener(this);
+
         if (inActionMode()) {
-            if (isFeed) {
-                holder.selectCheckbox.setVisibility(View.VISIBLE);
-                holder.selectView.setVisibility(View.VISIBLE);
-            }
-            holder.selectCheckbox.setChecked((isSelected(position)));
-            holder.selectCheckbox.setOnCheckedChangeListener((buttonView, isChecked)
-                    -> setSelected(holder.getBindingAdapterPosition(), isChecked));
-            holder.imageView.setAlpha(0.6f);
-            holder.count.setVisibility(View.GONE);
+            bindOnActionMode(holder, isFeed, position);
         } else {
             holder.selectView.setVisibility(View.GONE);
             holder.imageView.setAlpha(1.0f);
         }
 
-        holder.itemView.setOnLongClickListener(v -> {
-            if (!inActionMode()) {
-                if (isFeed) {
-                    longPressedPosition = holder.getBindingAdapterPosition();
-                }
-                selectedItem = drawerItem;
-            }
-            return false;
-        });
+        setItemLongClickListener(holder, drawerItem, isFeed);
+        setItemTouchListener(holder, drawerItem, isFeed);
+        setItemClickListener(holder, drawerItem, isFeed);
+    }
 
+    private void bindOnActionMode(@NonNull SubscriptionViewHolder holder, boolean isFeed, int position) {
+        if (isFeed) {
+            holder.selectCheckbox.setVisibility(View.VISIBLE);
+            holder.selectView.setVisibility(View.VISIBLE);
+        }
+        holder.selectCheckbox.setChecked((isSelected(position)));
+        holder.selectCheckbox.setOnCheckedChangeListener((buttonView, isChecked)
+                -> setSelected(holder.getBindingAdapterPosition(), isChecked));
+        holder.imageView.setAlpha(0.6f);
+        holder.count.setVisibility(View.GONE);
+    }
+
+    private void setItemTouchListener(@NonNull SubscriptionViewHolder holder, NavDrawerData.DrawerItem drawerItem, boolean isFeed) {
         holder.itemView.setOnTouchListener((v, e) -> {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 if (e.isFromSource(InputDevice.SOURCE_MOUSE)
-                        &&  e.getButtonState() == MotionEvent.BUTTON_SECONDARY) {
+                        && e.getButtonState() == MotionEvent.BUTTON_SECONDARY) {
                     if (!inActionMode()) {
                         if (isFeed) {
                             longPressedPosition = holder.getBindingAdapterPosition();
@@ -144,6 +152,9 @@ public class SubscriptionsRecyclerAdapter extends SelectableAdapter<Subscription
             }
             return false;
         });
+    }
+
+    private void setItemClickListener(@NonNull SubscriptionViewHolder holder, NavDrawerData.DrawerItem drawerItem, boolean isFeed) {
         holder.itemView.setOnClickListener(v -> {
             if (isFeed) {
                 if (inActionMode()) {
@@ -158,7 +169,18 @@ public class SubscriptionsRecyclerAdapter extends SelectableAdapter<Subscription
                 mainActivityRef.get().loadChildFragment(fragment);
             }
         });
+    }
 
+    private void setItemLongClickListener(@NonNull SubscriptionViewHolder holder, NavDrawerData.DrawerItem drawerItem, boolean isFeed) {
+        holder.itemView.setOnLongClickListener(v -> {
+            if (!inActionMode()) {
+                if (isFeed) {
+                    longPressedPosition = holder.getBindingAdapterPosition();
+                }
+                selectedItem = drawerItem;
+            }
+            return false;
+        });
     }
 
     @Override
@@ -254,7 +276,49 @@ public class SubscriptionsRecyclerAdapter extends SelectableAdapter<Subscription
             selectView.setBackground(drawable); // Setting this in XML crashes API <= 21
             feedTitle.setText(drawerItem.getTitle());
             imageView.setContentDescription(drawerItem.getTitle());
-            feedTitle.setVisibility(View.VISIBLE);
+
+            bindCounterView(drawerItem);
+
+            if (drawerItem.type == NavDrawerData.DrawerItem.Type.FEED) {
+                Feed feed = ((NavDrawerData.FeedDrawerItem) drawerItem).feed;
+                setTitleByTextAndImageCombind(feed, drawerItem);
+                showCoverImage(feed.getImageUrl(), imageView);
+            } else {
+                showCoverImage(R.drawable.ic_tag, imageView);
+            }
+        }
+
+        public void bindDummy() {
+            feedTitle.setText("███████");
+            count.setVisibility(View.GONE);
+            new CoverLoader(mainActivityRef.get())
+                    .withResource(android.R.color.transparent)
+                    .withPlaceholderView(feedTitle, false)
+                    .withCoverView(imageView)
+                    .load();
+
+        }
+
+        private void setTitleByTextAndImageCombind(Feed feed, NavDrawerData.DrawerItem drawerItem) {
+            if (isTitleShouldShow(feed, drawerItem)) {
+                feedTitle.setVisibility(View.VISIBLE);
+            } else {
+                feedTitle.setVisibility(View.GONE);
+            }
+        }
+
+        private boolean isTitleShouldShow(Feed feed, NavDrawerData.DrawerItem drawerItem) {
+            boolean isTitleShowNeedToShow = feed.isLocalFeed()
+                    && feed.getImageUrl() != null && feed.getImageUrl().startsWith(Feed.PREFIX_GENERATIVE_COVER);
+
+            if (feed.getImageUrl() == null || feed.getImageUrl().isEmpty() || drawerItem.type != NavDrawerData.DrawerItem.Type.FEED) {
+                return true;
+            }
+
+            return isTitleShowNeedToShow;
+        }
+
+        private void bindCounterView(NavDrawerData.DrawerItem drawerItem) {
             if (TextUtils.getLayoutDirectionFromLocale(Locale.getDefault()) == View.LAYOUT_DIRECTION_RTL) {
                 count.setCorner(TriangleLabelView.Corner.TOP_LEFT);
             }
@@ -265,34 +329,28 @@ public class SubscriptionsRecyclerAdapter extends SelectableAdapter<Subscription
             } else {
                 count.setVisibility(View.GONE);
             }
-
-            if (drawerItem.type == NavDrawerData.DrawerItem.Type.FEED) {
-                Feed feed = ((NavDrawerData.FeedDrawerItem) drawerItem).feed;
-                boolean textAndImageCombind = feed.isLocalFeed()
-                        && feed.getImageUrl() != null && feed.getImageUrl().startsWith(Feed.PREFIX_GENERATIVE_COVER);
-                new CoverLoader(mainActivityRef.get())
-                        .withUri(feed.getImageUrl())
-                        .withPlaceholderView(feedTitle, textAndImageCombind)
-                        .withCoverView(imageView)
-                        .load();
-            } else {
-                new CoverLoader(mainActivityRef.get())
-                        .withResource(R.drawable.ic_tag)
-                        .withPlaceholderView(feedTitle, true)
-                        .withCoverView(imageView)
-                        .load();
-            }
         }
 
-        public void bindDummy() {
-            feedTitle.setText("███████");
-            feedTitle.setVisibility(View.VISIBLE);
-            count.setVisibility(View.GONE);
-            new CoverLoader(mainActivityRef.get())
-                    .withResource(android.R.color.transparent)
-                    .withPlaceholderView(feedTitle, false)
-                    .withCoverView(imageView)
-                    .load();
+        private void showCoverImage(String imageUrl, ImageView targetView) {
+            RequestBuilder<Drawable> requestBuilder = Glide.with(mainActivityRef.get())
+                    .load(imageUrl);
+            showCoverImage(requestBuilder, targetView);
+        }
+
+        private void showCoverImage(@DrawableRes int drawableResource, ImageView targetView) {
+            RequestBuilder<Drawable> requestBuilder = Glide.with(mainActivityRef.get())
+                    .load(drawableResource);
+            showCoverImage(requestBuilder, targetView);
+        }
+
+        private void showCoverImage(RequestBuilder<Drawable> requestBuilder, ImageView targetView) {
+            requestBuilder
+                    .apply(new RequestOptions()
+                            .placeholder(R.color.light_gray)
+                            .transform(new FitCenter(), new RoundedCorners((int)
+                                    (8 * mainActivityRef.get().getResources().getDisplayMetrics().density)))
+                            .dontAnimate())
+                    .into(targetView);
         }
     }
 
